@@ -1,0 +1,115 @@
+﻿@page "/books/edit"
+@using Microsoft.EntityFrameworkCore
+@using BookStoreApp.Models
+@using Microsoft.AspNetCore.Authorization
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@attribute [Authorize(Policy = "AdminOnly")]
+
+
+
+
+<PageTitle>Edit</PageTitle>
+
+<h1>Edit</h1>
+
+<h2>Book</h2>
+<hr />
+@if (Book is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm method="post" Model="Book" OnValidSubmit="UpdateBook" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert"/>
+                <input type="hidden" name="Book.Id" value="@Book.Id" />
+                <div class="mb-3">
+                <span class="text-danger">*</span>
+                    <label for="title" class="form-label">Title:</label>
+                    <InputText id="title" @bind-Value="Book.Title" class="form-control" aria-required="true"/>
+                    <ValidationMessage For="() => Book.Title" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                <span class="text-danger">*</span>
+                    <label for="author" class="form-label">Author:</label>
+                    <InputText id="author" @bind-Value="Book.Author" class="form-control" aria-required="true"/>
+                    <ValidationMessage For="() => Book.Author" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                <span class="text-danger">*</span>
+                    <label for="genre" class="form-label">Genre:</label>
+                    <InputText id="genre" @bind-Value="Book.Genre" class="form-control" aria-required="true"/>
+                    <ValidationMessage For="() => Book.Genre" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                <span class="text-danger">*</span>
+                    <label for="price" class="form-label">Price:</label>
+                    <InputNumber id="price" @bind-Value="Book.Price" class="form-control" aria-required="true"/>
+                    <ValidationMessage For="() => Book.Price" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/books">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private Book? Book { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+		Book ??= await context.Books.FindAsync(Id);
+
+
+        if (Book is null)
+        {
+            NavigationManager.NotFound();
+        }
+    }
+
+    // To protect from overposting attacks, enable the specific properties you want to bind to.
+    // For more information, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task UpdateBook()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(Book!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!BookExists(Book!.Id))
+            {
+                NavigationManager.NotFound();
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/books");
+    }
+
+    private bool BookExists(int id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.Books.Any(e => e.Id == id);
+    }
+}

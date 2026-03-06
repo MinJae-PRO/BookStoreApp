@@ -1,0 +1,70 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using System.Security.Claims
+@using BookStoreApp.Models
+@inject AuthenticationStateProvider Auth
+@inject UserManager<AppUser> UserManager
+
+<nav class="navbar bg-body-tertiary px-3">
+	<div class="container-fluid">
+		<a class="navbar-brand" href="#">
+			BookStore
+		</a>
+
+		<ul class="nav">
+			<a class="nav-link" href="#">Home</a>
+			<a class="nav-link" href="/books">Book List</a>
+			<CascadingAuthenticationState>
+				<AuthorizeView>
+					<NotAuthorized>
+						<a class="nav-link" href="/register">Sign Up</a>
+						<a class="nav-link" href="/login">Log In</a>
+					</NotAuthorized>
+					<Authorized>
+
+						<a class="nav-link" href="/logout">Log Out</a>
+						<span class="nav-link text-dark">@_userName (@_userRoleName)</span>
+					</Authorized>
+				</AuthorizeView>
+			</CascadingAuthenticationState>
+
+		</ul>
+
+	</div>
+</nav>
+
+@code {
+	private string _userName = "";
+	private string _userRoleName = "";
+
+	// Identity framework
+	protected override async Task OnInitializedAsync()
+	{
+		var authState = await Auth.GetAuthenticationStateAsync();
+		var user = authState.User;
+
+		if (user.Identity is null || !user.Identity.IsAuthenticated)
+		{
+			_userName = "";
+			_userRoleName = "";
+			return;
+		}
+		var appUser = await UserManager.GetUserAsync(user);
+		if (appUser is not null)
+		{
+			_userName = !string.IsNullOrWhiteSpace(appUser.Name)
+				? appUser.Name
+				: appUser.Email ?? "";
+
+			var roles = await UserManager.GetRolesAsync(appUser);
+			_userRoleName = roles.FirstOrDefault() ?? "";
+		}
+		else
+		{
+			_userName = user.Identity.Name ?? "";
+			_userRoleName = "";
+		}
+	}
+}
+
+

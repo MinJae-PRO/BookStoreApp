@@ -1,0 +1,84 @@
+﻿@page "/login"
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using BookStoreApp.Models
+@inject UserManager<AppUser> UserManager
+@inject NavigationManager NavigationManager
+
+
+
+<PageTitle>Log Up</PageTitle>
+
+<h1>Log In</h1>
+
+
+<hr />
+
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="@InputUser" method="post" OnValidSubmit="@LoginUserAsync" FormName="login" Enhance>
+            <DataAnnotationsValidator />
+            @* <ValidationSummary class="text-danger" role="alert"/> *@
+            <div class="mb-3">
+
+                <label for="title" class="form-label">Email::</label>
+                <InputText id="title" type="email" @bind-Value="InputUser.Email" class="form-control" aria-required="true" placeholder="Enter your email address." />
+                <ValidationMessage For="() => InputUser.Email" class="text-danger" />
+            </div>
+         
+            <div class="mb-3">
+
+                <label for="Password" class="form-label">Password:</label>
+                <InputText id="Password" type="password" @bind-Value="InputUser.Password" class="form-control" aria-required="true" placeholder="Enter your password." />
+                <ValidationMessage For="() => InputUser.Password" class="text-danger" />
+            </div>
+
+            @if (!_isInputValid)
+            {
+                <div class="text-danger mb-3"> Incorrect Email or Password</div>
+			}
+            
+            <button type="submit" class="me-3 btn btn-primary">Log in</button>
+            <button type="reset" class="btn btn-primary">Reset</button>
+        </EditForm>
+    </div>
+</div>
+
+<div>
+    <a href="/">Back to Home</a>
+</div>
+
+
+
+@code {
+	[SupplyParameterFromForm(FormName = "login")]
+	private InputModel InputUser { get; set; } = new();
+
+	private bool _isInputValid = true;
+    // Manager checks if the user infomation exists in the database.
+    // if not , input valid is false.
+	private async Task LoginUserAsync()
+	{
+		var user = await UserManager.FindByEmailAsync(InputUser.Email);
+
+		if (user is null || !await UserManager.CheckPasswordAsync(user, InputUser.Password))
+		{
+			_isInputValid = false;
+			return;
+		}
+
+		_isInputValid = true;
+
+		NavigationManager.NavigateTo($"/auth/signin?email={Uri.EscapeDataString(InputUser.Email)}", true);
+	}
+
+	private class InputModel
+	{
+		[Required(ErrorMessage = "Email is required.")]
+		[EmailAddress(ErrorMessage = "Incorrect Email form.")]
+		public string Email { get; set; } = "";
+
+		[StringLength(15, ErrorMessage = "{0} must be between {2} and {1} characters long.", MinimumLength = 6)]
+		public string Password { get; set; } = "";
+	}
+}

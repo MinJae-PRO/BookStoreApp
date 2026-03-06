@@ -1,0 +1,62 @@
+﻿@page "/books"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@implements IAsyncDisposable
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+
+@rendermode InteractiveServer
+
+<PageTitle>Index</PageTitle>
+
+<h1>Book List</h1>
+
+<p>
+    <CascadingAuthenticationState>
+        <AuthorizeView>
+            <NotAuthorized>
+                <span class="text-danger">You must be logged in to create a new book.</span>
+            </NotAuthorized>
+            <Authorized>    
+                <a href="books/create">Create New</a>
+            </Authorized>
+        </AuthorizeView>
+ </CascadingAuthenticationState>
+</p>
+
+<QuickGrid Class="table" Items="context.Books" Pagination="_page">
+    <PropertyColumn Property="book => book.Title" Sortable="true" />
+    <PropertyColumn Property="book => book.Author" Sortable="true" />
+    <PropertyColumn Property="book => book.Genre" Sortable="true" />
+    <PropertyColumn Property="book => book.Price" Sortable="true" />
+
+    <TemplateColumn Context="book">
+        <CascadingAuthenticationState>
+            <AuthorizeView Policy="AdminOnly">
+                <a href="@($"books/edit?id={book.Id}")">Edit</a>
+            </AuthorizeView>
+            <a href="@($"books/details?id={book.Id}")">Details</a>
+            <AuthorizeView Policy="AdminOnly">
+                <a href="@($"books/delete?id={book.Id}")">Delete</a>
+            </AuthorizeView>
+        </CascadingAuthenticationState>            
+     </TemplateColumn>
+ </QuickGrid>
+
+<Paginator State="_page" />
+
+
+@code {
+    private AppDbContext context = default!;
+
+    private PaginationState _page = new PaginationState { ItemsPerPage = 8 };
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

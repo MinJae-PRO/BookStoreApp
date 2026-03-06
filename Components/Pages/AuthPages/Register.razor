@@ -1,0 +1,122 @@
+﻿@page "/register"
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using BookStoreApp.Models
+@inject UserManager<AppUser> UserManager
+@inject NavigationManager NavigationManager
+
+
+<PageTitle>Sign Up</PageTitle>
+
+<h1>Sign Up</h1>
+
+
+<hr />
+
+<div class="row">
+    <div class="col-md-4">
+        <EditForm Model="@InputUser" method="post" OnValidSubmit="@AddUserAsync" FormName="register" Enhance>
+            <DataAnnotationsValidator />
+            @* <ValidationSummary class="text-danger" role="alert"/> *@
+            <div class="mb-3">
+            
+                <label for="title" class="form-label">Email:</label> 
+                <InputText id="title" type="email" @bind-Value="InputUser.Email" class="form-control" aria-required="true" placeholder="Enter your email address." />
+                <ValidationMessage For="() => InputUser.Email" class="text-danger" />
+				@if (_emailExists)
+					{
+						<div class="text-danger"> This Email is already exist</div>
+					}
+				</div>        
+				<div class="mb-3">
+
+					<label for="Name" class="form-label">Name:</label>
+					<InputText id="Name" @bind-Value="InputUser.Name" class="form-control" aria-required="true" placeholder="Enter your name (nickname)." />
+					<ValidationMessage For="() => InputUser.Name" class="text-danger" />
+				</div>        
+				<div class="mb-3">
+
+					<label for="Password" class="form-label">Password:</label>
+					<InputText id="Password" type="password" @bind-Value="InputUser.Password" class="form-control" aria-required="true" placeholder="Enter your password." />
+					<ValidationMessage For="() => InputUser.Password" class="text-danger" />
+				</div>        
+				<div class="mb-3">
+
+					<label for="confirm" class="form-label">Confirm Password:</label>
+					<InputText id="confirm" type="password" @bind-Value="InputUser.ConfirmPassword" class="form-control" aria-required="true" placeholder="Confirm your password." />
+					<ValidationMessage For="() => InputUser.ConfirmPassword" class="text-danger" />
+				</div>
+
+				@foreach (var error in _errors)
+				{
+					<div class="text-danger mb-1">@error</div>
+				}
+
+				<button type="submit" class="btn btn-primary">Create</button>
+        </EditForm>
+    </div>
+</div>
+
+<div>
+    <a href="/">Back to Home</a>
+</div>
+
+@code {
+	[SupplyParameterFromForm(FormName = "register")]
+	private InputModel InputUser { get; set; } = new();
+
+	private bool _emailExists;
+	private List<string> _errors = new();
+
+	// To protect from overposting attacks, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+	// Create user and add to "User"
+	// if the email is already exist, return false
+	private async Task AddUserAsync()
+	{
+		_errors.Clear();
+
+		var existingUser = await UserManager.FindByEmailAsync(InputUser.Email);
+		if (existingUser is not null)
+		{
+			_emailExists = true;
+			return;
+		}
+
+		_emailExists = false;
+
+		var newUser = new AppUser
+		{
+			UserName = InputUser.Email,
+			Email = InputUser.Email,
+			Name = InputUser.Name
+		};
+
+		var result = await UserManager.CreateAsync(newUser, InputUser.Password);
+		if (!result.Succeeded)
+		{
+			_errors = result.Errors.Select(e => e.Description).ToList();
+			return;
+		}
+		// All new accounts added to "User" role 
+		await UserManager.AddToRoleAsync(newUser, "User");
+
+		NavigationManager.NavigateTo($"/auth/signin?email={Uri.EscapeDataString(newUser.Email)}", true);
+	}
+
+	private class InputModel
+	{
+		[Required(ErrorMessage = "Email is required.")]
+		[EmailAddress(ErrorMessage = "Incorrect Email form.")]
+		public string Email { get; set; } = "";
+
+		[Required(ErrorMessage = "Name(nickname) is required.")]
+		public string Name { get; set; } = ""; 
+
+		[StringLength(15, ErrorMessage = "{0} must be between {2} and {1} characters long.", MinimumLength = 6)]
+		public string Password { get; set; } = ""; 
+
+		[Required(ErrorMessage = "Confirm Password is required.")]
+		[Compare("Password", ErrorMessage = "Password and confirmation password do not match.")]
+		public string ConfirmPassword { get; set; } = ""; 
+	}
+}

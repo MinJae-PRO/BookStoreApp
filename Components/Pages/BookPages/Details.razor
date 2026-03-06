@@ -1,0 +1,58 @@
+﻿@page "/books/details"
+@using Microsoft.EntityFrameworkCore
+@using BookStoreApp.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Details</PageTitle>
+
+<h1>Details</h1>
+
+<div>
+    <h2>Book</h2>
+    <hr />
+    @if (book is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Title</dt>
+            <dd class="col-sm-10">@book.Title</dd>
+            <dt class="col-sm-2">Author</dt>
+            <dd class="col-sm-10">@book.Author</dd>
+            <dt class="col-sm-2">Genre</dt>
+            <dd class="col-sm-10">@book.Genre</dd>
+            <dt class="col-sm-2">Price</dt>
+            <dd class="col-sm-10">@book.Price</dd>
+        </dl>
+        <div>
+            <CascadingAuthenticationState>
+                <AuthorizeView Policy="AdminOnly">
+                    <a href="@($"/books/edit?id={book.Id}")">Edit</a> |
+                </AuthorizeView>
+            </CascadingAuthenticationState>
+
+            <a href="@($"/books")">Back to List</a>
+        </div>
+    }
+</div>
+
+@code {
+    private Book? book;
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        book = await context.Books.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (book is null)
+        {
+            NavigationManager.NotFound();
+        }
+    }
+}
