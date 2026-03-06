@@ -13,6 +13,11 @@
 
 <h1>Book List</h1>
 
+<div class="d-flex align-items-center mb-3" style="max-width:250px;">
+    <img src="images/search.png" alt="search" width="30" height="30" class="me-2" />
+    <input type="text" class="form-control" placeholder="Find your favorite book" @bind="_search" @bind:event="oninput" />
+</div>
+
 <p>
     <CascadingAuthenticationState>
         <AuthorizeView>
@@ -26,7 +31,7 @@
  </CascadingAuthenticationState>
 </p>
 
-<QuickGrid Class="table" Items="context.Books" Pagination="_page">
+<QuickGrid Class="table" Items="FilteredBooks" Pagination="_page">
     <PropertyColumn Property="book => book.Title" Sortable="true" />
     <PropertyColumn Property="book => book.Author" Sortable="true" />
     <PropertyColumn Property="book => book.Genre" Sortable="true" />
@@ -50,6 +55,12 @@
 
 @code {
     private AppDbContext context = default!;
+    private string _search = "";
+    // Filter books by title 
+    private IQueryable<Book> FilteredBooks =>
+        string.IsNullOrWhiteSpace(_search)
+            ? context.Books
+            : context.Books.Where(b => b.Title.Contains(_search));
 
     private PaginationState _page = new PaginationState { ItemsPerPage = 8 };
 
