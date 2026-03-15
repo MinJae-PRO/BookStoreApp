@@ -27,5 +27,9 @@ namespace BookStoreApp.Models
         [Required]
         [Column("price")]
         public decimal Price { get; set; }
+
+        [Required]
+        [Column("stock")]
+        public int Stock { get; set; }
     }
 }

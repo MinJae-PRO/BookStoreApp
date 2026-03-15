@@ -2,10 +2,14 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
 @using BookStoreApp.Models
 @using BookStoreApp.Data
 @implements IAsyncDisposable
-@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
 
 @rendermode InteractiveServer
 
@@ -13,11 +17,28 @@
 
 <h1>Book List</h1>
 
-<div class="d-flex align-items-center mb-3" style="max-width:250px;">
-    <img src="images/search.png" alt="search" width="30" height="30" class="me-2" />
-    <input type="text" class="form-control" placeholder="Find your favorite book" @bind="_search" @bind:event="oninput" />
+<div class="d-flex align-items-center mb-3 gap-3 flex-wrap">
+    <div class="d-flex align-items-center" style="max-width:300px;">
+        <img src="images/search.png" alt="search" width="30" height="30" class="me-2" />
+        <input type="text" class="form-control" placeholder="Search books" 
+               @bind="_search" @bind:event="oninput" 
+               @bind:after="OnSearchChanged" />
+    </div>
+    <select class="form-select" style="max-width:180px;" 
+            @bind="_chooseGenre" 
+            @bind:after="OnFilterChanged">
+        <option value="">All Categories</option>
+        @foreach (var genre in _genres)
+        {<option value="@genre">@genre</option>}
+    </select>
+    <select class="form-select" style="max-width:180px;" 
+            @bind="_priceSort" 
+            @bind:after="OnFilterChanged">
+        <option value="">Sort by price</option>
+        <option value="asc">Price: Low → High</option>
+        <option value="desc">Price: High → Low</option>
+    </select>
 </div>
-
 <p>
     <CascadingAuthenticationState>
         <AuthorizeView>
@@ -31,12 +52,27 @@
  </CascadingAuthenticationState>
 </p>
 
-<QuickGrid Class="table" Items="FilteredBooks" Pagination="_page">
+<QuickGrid Class="table" Items="BookLists" Pagination="_page">
     <PropertyColumn Property="book => book.Title" Sortable="true" />
     <PropertyColumn Property="book => book.Author" Sortable="true" />
     <PropertyColumn Property="book => book.Genre" Sortable="true" />
     <PropertyColumn Property="book => book.Price" Sortable="true" />
 
+    @if (_userId is not null)
+    {
+        <TemplateColumn Title="Favourite" Align="Align.Center" Context="book">
+            <button class="btn btn-sm p-0 border-0" @onclick="() => ToggleFavourite(book.Id)">
+                @if (_FavouriteBookIds.Contains(book.Id))
+                {
+                    <i class="bi bi-heart-fill text-danger" style="font-size:1.3rem;"></i>
+                }
+                else
+                {
+                    <i class="bi bi-heart text-muted" style="font-size:1.3rem;"></i>
+                }
+            </button>
+        </TemplateColumn>
+    }
     <TemplateColumn Context="book">
         <CascadingAuthenticationState>
             <AuthorizeView Policy="AdminOnly">
@@ -46,6 +82,10 @@
             <AuthorizeView Policy="AdminOnly">
                 <a href="@($"books/delete?id={book.Id}")">Delete</a>
             </AuthorizeView>
+            @if (_userId is not null)
+            {
+                <button class="btn-store btn-store-sm ms-1" @onclick="() => AddToCart(book.Id)">Add to Cart</button>
+            }
         </CascadingAuthenticationState>            
      </TemplateColumn>
  </QuickGrid>
@@ -54,20 +94,238 @@
 
 
 @code {
-    private AppDbContext context = default!;
-    private string _search = "";
-    // Filter books by title 
-    private IQueryable<Book> FilteredBooks =>
-        string.IsNullOrWhiteSpace(_search)
-            ? context.Books
-            : context.Books.Where(b => b.Title.Contains(_search));
 
+    private AppDbContext context = default!;
+    private CancellationTokenSource _asyncCancellation = new();
+    private bool _isDataLoading = false;
+    private bool _dataLoaded = false;
+
+    // Filter and search fields
+    private string _search = "";
+    private string _chooseGenre = "";
+    private string _priceSort = "";
+    private string? _userId;
+    private HashSet<int> _FavouriteBookIds = new();
+    private List<string> _genres = new();
+    private List<Book> _allBooks = new();
+
+    private IQueryable<Book> BookLists
+    {
+        // Execute getter when access to properties 
+        get
+        {
+            if (!_dataLoaded || _isDataLoading)
+                return new List<Book>().AsQueryable();
+
+            var filteredBooks = _allBooks.AsEnumerable();
+
+            // Apply search filter
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                var term = _search.Trim();
+                filteredBooks = filteredBooks.Where(b =>
+                    b.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    b.Author.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    b.Genre.Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Apply genre filter
+            if (!string.IsNullOrWhiteSpace(_chooseGenre))
+            {
+                filteredBooks = filteredBooks.Where(b => b.Genre == _chooseGenre);
+            }
+
+            // Apply price sorting
+            filteredBooks = _priceSort switch
+            {
+                "asc" => filteredBooks.OrderBy(b => b.Price),
+                "desc" => filteredBooks.OrderByDescending(b => b.Price),
+                _ => filteredBooks
+            };
+            return filteredBooks.AsQueryable();
+        }
+    }
+    // the exceptions can be thrown if user changes page while data is still loading, 
+    // so it checks for loading state in the getter and return empty list to avoid exceptions.
     private PaginationState _page = new PaginationState { ItemsPerPage = 8 };
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         context = DbFactory.CreateDbContext();
+
+        try
+        {
+            if (_isDataLoading) return;
+            _isDataLoading = true;
+
+            _allBooks = await context.Books
+                .OrderBy(b => b.Title)
+                .ToListAsync(_asyncCancellation.Token);
+
+            _genres = _allBooks
+                .Select(b => b.Genre)
+                .Distinct()
+                .OrderBy(g => g)
+                .ToList();
+
+            // Get authentication state
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+
+            // Get user information if authenticated
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var appUser = await userManager.GetUserAsync(authState.User);
+            if (appUser is not null)
+            {
+                _userId = appUser.Id;
+                _FavouriteBookIds = (await context.FavouriteBooks
+                    .Where(f => f.UserId == _userId)
+                    .Select(f => f.BookId)
+                    .ToListAsync(_asyncCancellation.Token))
+                    .ToHashSet();
+            }
+            _dataLoaded = true;
+        }
+        catch (OperationCanceledException)
+        {
+            
+        }
+        catch (Exception)
+        {
+            _dataLoaded = false;
+        }
+        finally
+        {
+            _isDataLoading = false;
+        }
     }
 
-    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+    private async Task ToggleFavourite(int bookId)
+    {
+        if (_userId is null || _asyncCancellation.Token.IsCancellationRequested) return;
+
+        try
+        {
+            await using var toggleContext = DbFactory.CreateDbContext();
+
+            var existing = await toggleContext.FavouriteBooks
+                .FirstOrDefaultAsync(f => f.UserId == _userId && f.BookId == bookId, _asyncCancellation.Token);
+
+            if (existing is not null)
+            {
+                toggleContext.FavouriteBooks.Remove(existing);
+                _FavouriteBookIds.Remove(bookId);
+            }
+            else
+            {
+                toggleContext.FavouriteBooks.Add(new FavouriteBook
+                {
+                    UserId = _userId,
+                    BookId = bookId
+                });
+                _FavouriteBookIds.Add(bookId);
+            }
+
+            await toggleContext.SaveChangesAsync(_asyncCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private async Task AddToCart(int bookId)
+    {
+        if (_userId is null || _asyncCancellation.Token.IsCancellationRequested) return;
+
+        try
+        {
+            // Use separate DbContext instance to avoid concurrency issues
+            await using var context = DbFactory.CreateDbContext();
+            var existing = await context.CartItems
+                .FirstOrDefaultAsync(c => c.UserId == _userId && c.BookId == bookId, _asyncCancellation.Token);
+
+            if (existing is not null)
+            {
+                existing.Quantity += 1;
+            }
+            else
+            {
+                context.CartItems.Add(new CartItem
+                {
+                    UserId = _userId,
+                    BookId = bookId,
+                    Quantity = 1
+                });
+            }
+
+            await context.SaveChangesAsync(_asyncCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    // Method to refresh book data when needed (e.g., after creating a new book)
+    private async Task RefreshBookData()
+    {
+        if (_isDataLoading) return;
+
+        try
+        {
+            _isDataLoading = true;
+
+            _allBooks = await context.Books
+                .OrderBy(b => b.Title)
+                .ToListAsync(_asyncCancellation.Token);
+
+            _genres = _allBooks
+                .Select(b => b.Genre)
+                .Distinct()
+                .OrderBy(g => g)
+                .ToList();
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+        finally
+        {
+            _isDataLoading = false;
+        }
+    }
+
+    // Event handlers for filter changes to trigger UI updates
+    private async Task OnSearchChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnFilterChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _asyncCancellation.CancelAsync();
+
+        if (context is not null)
+            await context.DisposeAsync();
+
+        _asyncCancellation.Dispose();
+
+        _allBooks.Clear();
+        _FavouriteBookIds.Clear();
+        _genres.Clear();
+    }
 }

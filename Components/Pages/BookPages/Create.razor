@@ -41,7 +41,13 @@
                 <InputNumber id="price" @bind-Value="Book.Price" class="form-control" aria-required="true"/> 
                 <ValidationMessage For="() => Book.Price" class="text-danger" /> 
             </div>        
-            <button type="submit" class="btn btn-primary">Create</button>
+            <div class="mb-3">
+                <span class="text-danger">*</span>
+                <label for="stock" class="form-label">Stock:</label> 
+                <InputNumber id="stock" @bind-Value="Book.Stock" class="form-control" aria-required="true"/> 
+                <ValidationMessage For="() => Book.Stock" class="text-danger" /> 
+            </div>        
+            <button type="submit" class="btn-store">Create</button>
         </EditForm>
     </div>
 </div>

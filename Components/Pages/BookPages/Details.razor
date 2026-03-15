@@ -1,9 +1,16 @@
 ﻿@page "/books/details"
 @using Microsoft.EntityFrameworkCore
-@using BookStoreApp.Models
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
 @inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+
+@rendermode InteractiveServer
 
 <PageTitle>Details</PageTitle>
 
@@ -14,9 +21,10 @@
     <hr />
     @if (book is null)
     {
-        <p><em>Loading...</em></p>
+        <p><em>Loading</em></p>
     }
-    else {
+    else
+    {
         <dl class="row">
             <dt class="col-sm-2">Title</dt>
             <dd class="col-sm-10">@book.Title</dd>
@@ -26,33 +34,292 @@
             <dd class="col-sm-10">@book.Genre</dd>
             <dt class="col-sm-2">Price</dt>
             <dd class="col-sm-10">@book.Price</dd>
+            <dt class="col-sm-2">Stock</dt>
+            <dd class="col-sm-10">
+                @if (book.Stock > 0)
+                {
+                    <span class="text-success">@book.Stock in stock</span>
+                }
+                else
+                {
+                    <span class="text-danger">Out of stock</span>
+                }
+            </dd>
+            <dt class="col-sm-2">Overall</dt>
+            <dd class="col-sm-10">
+                @if (_reviews.Count == 0)
+                {
+                    <span class="text-muted">-</span>
+                }
+                else
+                {
+                    var avg = Math.Round(_reviews.Average(r => r.Rating), 1);
+                    <span style="color:gold; font-size:1.0rem;">@avg / 5</span>
+                    <span class="ms-1">(@_reviews.Count reviews)</span>
+                }
+            </dd>
         </dl>
+
         <div>
             <CascadingAuthenticationState>
                 <AuthorizeView Policy="AdminOnly">
                     <a href="@($"/books/edit?id={book.Id}")">Edit</a> |
                 </AuthorizeView>
             </CascadingAuthenticationState>
-
-            <a href="@($"/books")">Back to List</a>
+            <a href="/books">Back to List</a>
         </div>
+
+        <hr />
+        <h4>Reviews</h4>
+
+        @if (_reviews.Count == 0)
+        {
+            <p class="text-muted">No reviews yet.</p>
+        }
+        else
+        {
+            @foreach (var review in _reviews)
+            {
+                <div class="card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>@review.User.Name</strong>
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    <span style="color:gold;">@(i <= review.Rating ? "★" : "☆")</span>
+                                }
+                            </div>
+                            <small class="text-muted">@review.CreatedAt.ToString("yyyy-MM-dd")</small>
+                        </div>
+
+                        @if (_editingReviewId == review.Id)
+                        {
+                            <div class="mt-2">
+                                <div class="mb-1">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        var star = i;
+                                        <span style="cursor:pointer; font-size:1.3rem; color:@(star <= _editRating ? "gold" : "gray");"
+                                              @onclick="() => _editRating = star">★</span>
+                                    }
+                                </div>
+                                <textarea class="form-control form-control-sm" rows="2" @bind="_editComment"></textarea>
+                                @if (!string.IsNullOrEmpty(_editError))
+                                {
+                                    <small class="text-danger">@_editError</small>
+                                }
+                                <div class="mt-1">
+                                    <button class="btn-store btn-store-sm" @onclick="SaveEdit">Save</button>
+                                    <button class="btn-store btn-store-sm ms-1" @onclick="CancelEdit">Cancel</button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mb-1 mt-1">@review.Comment</p>
+                            @if (_userId is not null && review.UserId == _userId)
+                            {
+                                <button class="btn-store btn-store-sm me-1" @onclick="() => StartEdit(review)">Edit</button>
+                                <button class="btn-store-danger btn-store-sm" @onclick="() => DeleteReview(review.Id)">Delete</button>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        }
+
+        <CascadingAuthenticationState>
+            <AuthorizeView>
+                <Authorized>
+                    @if (_userAlreadyReviewed)
+                    {
+                        <p class="text-muted mt-3">You have already reviewed this book.</p>
+                    }
+                    else
+                    {
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h5>Write a Review</h5>
+                                <div class="mb-2">
+                                    <label class="form-label">Rating</label><br />
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        var star = i;
+                                        <span style="cursor:pointer; font-size:1.5rem; color:@(star <= _newRating ? "gold" : "gray");"
+                                              @onclick="() => _newRating = star">★</span>
+                                    }
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Comment</label>
+                                    <textarea class="form-control" rows="3" placeholder="Write your review" @bind="_newComment"></textarea>
+                                </div>
+                                @if (!string.IsNullOrEmpty(_newError))
+                                {
+                                    <div class="text-danger mb-2">@_newError</div>
+                                }
+                                <button class="btn-store" @onclick="SubmitReview">Submit</button>
+                            </div>
+                        </div>
+                    }
+                </Authorized>
+                <NotAuthorized>
+                    <p class="text-muted mt-3">Please <a href="/login">log in</a> to write a review.</p>
+                </NotAuthorized>
+            </AuthorizeView>
+        </CascadingAuthenticationState>
     }
 </div>
 
 @code {
+    // properties
     private Book? book;
+    private List<BookReview> _reviews = new();
+    private string? _userId;
+    private int _newRating;
+    private string _newComment = "";
+    private string? _newError;
+    private bool _userAlreadyReviewed;
+    private int? _editingReviewId;
+    private int _editRating;
+    private string _editComment = "";
+    private string? _editError;
 
     [SupplyParameterFromQuery]
     private int Id { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
-        using var context = DbFactory.CreateDbContext();
+        await using var context = DbFactory.CreateDbContext();
         book = await context.Books.FirstOrDefaultAsync(m => m.Id == Id);
 
         if (book is null)
         {
             NavigationManager.NotFound();
+            return;
         }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+        if (appUser is not null)
+        {
+            _userId = appUser.Id;
+        }
+
+        await LoadReviewsAsync();
+    }
+
+    private async Task LoadReviewsAsync()
+    {
+        await using var context = DbFactory.CreateDbContext();
+        _reviews = await context.BookReviews
+            .Include(r => r.User)
+            .Where(r => r.BookId == Id)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        _userAlreadyReviewed = _userId is not null && _reviews.Any(r => r.UserId == _userId);
+    }
+
+    private async Task SubmitReview()
+    {
+        _newError = null;
+
+        if (_newRating < 1 || _newRating > 5)
+        {
+            _newError = "Please click the stars to rate (1~5).";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_newComment))
+        {
+            _newError = "Comment can't be empty.";
+            return;
+        }
+        if (_userId is null) return;
+
+        await using var context = DbFactory.CreateDbContext();
+
+        var exists = await context.BookReviews
+            .AnyAsync(r => r.UserId == _userId && r.BookId == Id);
+        if (exists)
+        {
+            _newError = "You have already reviewed this book.";
+            await LoadReviewsAsync();
+            return;
+        }
+
+        context.BookReviews.Add(new BookReview
+        {
+            BookId = Id,
+            UserId = _userId,
+            Rating = _newRating,
+            Comment = _newComment,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        _newRating = 0;
+        _newComment = "";
+        await LoadReviewsAsync();
+    }
+
+    private void StartEdit(BookReview review)
+    {
+        _editingReviewId = review.Id;
+        _editRating = review.Rating;
+        _editComment = review.Comment;
+        _editError = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingReviewId = null;
+        _editError = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        _editError = null;
+
+        if (_editRating < 1 || _editRating > 5)
+        {
+            _editError = "Please select a rating (1~5).";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editComment))
+        {
+            _editError = "Comment cannot be empty.";
+            return;
+        }
+        if (_userId is null || _editingReviewId is null) return;
+
+        await using var context = DbFactory.CreateDbContext();
+        var review = await context.BookReviews.FirstOrDefaultAsync(r => r.Id == _editingReviewId);
+
+        if (review is null || review.UserId != _userId) return;
+
+        review.Rating = _editRating;
+        review.Comment = _editComment;
+        await context.SaveChangesAsync();
+
+        _editingReviewId = null;
+        await LoadReviewsAsync();
+    }
+
+    private async Task DeleteReview(int reviewId)
+    {
+        if (_userId is null) return;
+
+        await using var context = DbFactory.CreateDbContext();
+        var review = await context.BookReviews.FirstOrDefaultAsync(r => r.Id == reviewId);
+
+        if (review is null || review.UserId != _userId) return;
+
+        context.BookReviews.Remove(review);
+        await context.SaveChangesAsync();
+
+        await LoadReviewsAsync();
     }
 }

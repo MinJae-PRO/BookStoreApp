@@ -1,0 +1,119 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<PageTitle>My Profile</PageTitle>
+
+<h1>My Profile</h1>
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <NotAuthorized>
+            <p class="text-danger">You must be logged in to view your profile.</p>
+        </NotAuthorized>
+        <Authorized>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h4 class="card-title">Profile Info</h4>
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4">Email</dt>
+                                <dd class="col-sm-8">@_email</dd>
+                                <dt class="col-sm-4">Name</dt>
+                                <dd class="col-sm-8">@_newName</dd>
+                            </dl>
+
+                            <hr />
+                            <h5>Change Name</h5>
+                            <div class="d-flex gap-2 align-items-center">
+                                <input type="text" class="form-control" style="max-width:200px;"
+                                       @bind="_newName" placeholder="Enter new name" />
+                                <button class="btn-store" @onclick="UpdateName">Save</button>
+                            </div>
+                            @if (!string.IsNullOrEmpty(_nameMessage))
+                            {
+                                <div class="@(_nameSuccess ? "text-success" : "text-danger") mt-2">@_nameMessage</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-4">
+                        <a href="/books/my-saved" class="btn-store">
+                            My Favourites
+                        </a>
+                        <a href="/orders"class="btn-store"">
+                            Order History
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private string? _userId;
+    private string _email = "";
+    private string _newName = "";
+    private string? _nameMessage;
+    private bool _nameSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        // scope here to get the UserManager and fetch user info
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        _userId = appUser.Id;
+        _email = appUser.Email ?? "";
+        _newName = appUser.Name;
+    }
+
+    private async Task UpdateName()
+    {
+        _nameMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_newName))
+        {
+            _nameMessage = "Name cannot be empty.";
+            _nameSuccess = false;
+            return;
+        }
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.FindByIdAsync(_userId!);
+
+        if (appUser is null) return;
+
+        appUser.Name = _newName.Trim();
+        var result = await userManager.UpdateAsync(appUser);
+
+        if (result.Succeeded)
+        {
+            NavigationManager.NavigateTo("/profile", forceLoad: true);
+            return;
+        }
+        else
+        {
+            _nameMessage = "Failed to update name.";
+            _nameSuccess = false;
+        }
+    }
+}

@@ -1,0 +1,92 @@
+@page "/books/my-saved"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+
+@rendermode InteractiveServer
+
+<PageTitle>My Saved Books</PageTitle>
+
+<h1>My Saved Books</h1>
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <NotAuthorized>
+            <p class="text-danger">You must be logged in to view saved books.</p>
+        </NotAuthorized>
+        <Authorized>
+            @if (!_books.Any())
+            {
+                <p class="text-muted">No saved books yet. Go to<a href="/books">Book List</a> to save your favourite books </p>
+            }
+            else
+            {
+                <QuickGrid Class="table" Items="_books" Pagination="_page">
+                    <PropertyColumn Property="b => b.Book.Title" Title="Title" Sortable="true" />
+                    <PropertyColumn Property="b => b.Book.Author" Title="Author" Sortable="true" />
+                    <PropertyColumn Property="b => b.Book.Genre" Title="Genre" Sortable="true" />
+                    <PropertyColumn Property="b => b.Book.Price" Title="Price" Sortable="true" />
+                    <TemplateColumn Title="Actions" Context="fav">
+                        <a href="@($"books/details?id={fav.BookId}")">Details</a>
+                        <button class="btn-store-danger btn-store-sm ms-2" @onclick="() => RemoveFavourite(fav)">
+                            Remove
+                        </button>
+                    </TemplateColumn>
+                </QuickGrid>
+
+                <Paginator State="_page" />
+            }
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private IQueryable<FavouriteBook> _books = Enumerable.Empty<FavouriteBook>().AsQueryable();
+    private string? _userId;
+    private PaginationState _page = new PaginationState { ItemsPerPage = 8 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is not null)
+        {
+            _userId = appUser.Id;
+            await LoadBooksAsync();
+        }
+    }
+
+    private async Task LoadBooksAsync()
+    {
+        await using var context = DbFactory.CreateDbContext();
+        var list = await context.FavouriteBooks
+            .Include(f => f.Book)
+            .Where(f => f.UserId == _userId)
+            .ToListAsync();
+        _books = list.AsQueryable();
+    }
+
+    private async Task RemoveFavourite(FavouriteBook fav)
+    {
+        await using var context = DbFactory.CreateDbContext();
+        var entity = await context.FavouriteBooks
+            .FirstOrDefaultAsync(f => f.Id == fav.Id);
+        if (entity is not null)
+        {
+            context.FavouriteBooks.Remove(entity);
+            await context.SaveChangesAsync();
+        }
+        await LoadBooksAsync();
+    }
+}

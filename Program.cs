@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
 // DbContext Factory for books pages
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlServer(
@@ -34,7 +35,7 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
-
+// Configure cookie settings for authentication
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/login";
@@ -70,7 +71,9 @@ app.UseAntiforgery();
 app.UseAuthentication();
 // Authorize user to access the page
 app.UseAuthorization();
-// Identtiy provides endpoints for user registration, login, and logout by Managers
+
+
+// validate email and sign in user, then redirect to home page and cookie creation
 app.MapGet("/auth/signin", async (string email, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, HttpContext context) =>
 {
     var user = await userManager.FindByEmailAsync(email);
@@ -82,7 +85,7 @@ app.MapGet("/auth/signin", async (string email, UserManager<AppUser> userManager
     context.Response.Redirect("/");
 });
 
-
+// Sign out user and redirect to home page after delete cookie
 app.MapGet("/logout", async (SignInManager<AppUser> signInManager, HttpContext context) =>
 {
     await signInManager.SignOutAsync();

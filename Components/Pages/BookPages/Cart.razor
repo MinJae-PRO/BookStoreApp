@@ -1,0 +1,128 @@
+@page "/cart"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<PageTitle>My Cart</PageTitle>
+
+<h1>My Cart</h1>
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <NotAuthorized>
+            <p class="text-danger">You must be logged in to view your cart.</p>
+        </NotAuthorized>
+        <Authorized>
+            @if (_cartItems.Count == 0)
+            {
+                <p class="text-muted">Your cart is empty.You can add books in<a href="/books">Book List</a></p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Price</th>
+                            <th>QYT</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _cartItems)
+                        {
+                            <tr>
+                                <td>@item.Book.Title</td>
+                                <td>@item.Book.Price.ToString("C")</td>
+                                <td>
+                                    <button class="btn-store btn-store-sm" @onclick="() => UpdateQuantity(item, -1)">−</button>
+                                    <span class="mx-2">@item.Quantity</span>
+                                    <button class="btn-store btn-store-sm" @onclick="() => UpdateQuantity(item, 1)">+</button>
+                                </td>
+                                <td>@((item.Book.Price * item.Quantity).ToString("C"))</td>
+                                <td>
+                                    <button class="btn-store-danger btn-store-sm" @onclick="() => RemoveItem(item.Id)">Remove</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="d-flex justify-content-end align-items-center gap-3 mt-3">
+                    <h5 class="mb-0">Total: @_cartItems.Sum(i => i.Book.Price * i.Quantity).ToString("C")</h5>
+                    <a href="/checkout" class="btn-store">Checkout</a>
+                </div>
+            }
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private List<CartItem> _cartItems = new();
+    private string? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is not null)
+        {
+            _userId = appUser.Id;
+            await LoadCartAsync();
+        }
+    }
+    // Load cart items for the current user
+    private async Task LoadCartAsync()
+    {
+        await using var context = DbFactory.CreateDbContext();
+        _cartItems = await context.CartItems
+            .Include(c => c.Book)
+            .Where(c => c.UserId == _userId)
+            .ToListAsync();
+    }
+    // if the item is less than 0 then remove the item from the cart otherwise update the quantity
+    private async Task UpdateQuantity(CartItem item, int change)
+    {
+        var newQty = item.Quantity + change;
+
+        await using var context = DbFactory.CreateDbContext();
+        var entity = await context.CartItems.FirstOrDefaultAsync(c => c.Id == item.Id);
+        if (entity is null) return;
+
+        if (newQty <= 0)
+        {
+            context.CartItems.Remove(entity);
+        }
+        else
+        {
+            entity.Quantity = newQty;
+        }
+
+        await context.SaveChangesAsync();
+        await LoadCartAsync();
+    }
+    // Remove the item from the cart and save changes to the database
+    private async Task RemoveItem(int cartItemId)
+    {
+        await using var context = DbFactory.CreateDbContext();
+        var entity = await context.CartItems.FirstOrDefaultAsync(c => c.Id == cartItemId);
+        if (entity is not null)
+        {
+            context.CartItems.Remove(entity);
+            await context.SaveChangesAsync();
+        }
+        await LoadCartAsync();
+    }
+}

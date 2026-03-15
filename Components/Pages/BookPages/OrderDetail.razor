@@ -1,0 +1,89 @@
+@page "/orders/detail"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<PageTitle>Order Detail</PageTitle>
+
+<h1>Order Detail</h1>
+
+@if (_order is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <h4>Order #@_order.Id — @_order.OrderDate.ToString("yyyy-MM-dd")</h4>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Price</th>
+                <th>QTY</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in _order.OrderItems)
+            {
+                <tr>
+                    <td>@item.Book.Title</td>
+                    <td>@item.UnitPrice.ToString("C")</td>
+                    <td>@item.Quantity</td>
+                    <td>@((item.UnitPrice * item.Quantity).ToString("C"))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-end">
+        <h5>Total: @_order.TotalPrice.ToString("C")</h5>
+    </div>
+
+    <a href="/orders">Back to Order History</a>
+}
+
+@code {
+    private Order? _order;
+    private string? _userId;
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        _userId = appUser.Id;
+        // check if the order matches the user
+        await using var context = DbFactory.CreateDbContext();
+        _order = await context.Orders
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Book)
+            .FirstOrDefaultAsync(o => o.Id == Id && o.UserId == _userId);
+
+        if (_order is null)
+        {
+            NavigationManager.NavigateTo("/orders");
+        }
+    }
+}

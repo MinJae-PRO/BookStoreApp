@@ -37,8 +37,12 @@
             <dt class="col-sm-2">Price</dt>
             <dd class="col-sm-10">@book.Price</dd>
         </dl>
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert alert-danger">@_error</div>
+        }
         <EditForm method="post" Model="book" OnValidSubmit="DeleteBook" FormName="delete" Enhance>
-            <button type="submit" class="btn btn-danger" disabled="@(book is null)">Delete</button> |
+            <button type="submit" class="btn-store-danger" disabled="@(book is null)">Delete</button> |
             <a href="/books">Back to List</a>
         </EditForm>
     }
@@ -61,10 +65,37 @@
         }
     }
 
+    private string? _error;
+
     private async Task DeleteBook()
     {
         using var context = DbFactory.CreateDbContext();
-        context.Books.Remove(book!);
+        var entity = await context.Books.FindAsync(book!.Id);
+        if (entity is null)
+        {
+            NavigationManager.NotFound();
+            return;
+        }
+
+        // Check for related records
+        var hasOrders = await context.OrderItems.AnyAsync(oi => oi.BookId == entity.Id);
+        if (hasOrders)
+        {
+            _error = "Cannot delete this book because it has existing order records.";
+            return;
+        }
+
+        // Remove related records that can be safely deleted
+        var reviews = await context.BookReviews.Where(r => r.BookId == entity.Id).ToListAsync();
+        context.BookReviews.RemoveRange(reviews);
+
+        var favorites = await context.FavouriteBooks.Where(f => f.BookId == entity.Id).ToListAsync();
+        context.FavouriteBooks.RemoveRange(favorites);
+
+        var cartItems = await context.CartItems.Where(c => c.BookId == entity.Id).ToListAsync();
+        context.CartItems.RemoveRange(cartItems);
+
+        context.Books.Remove(entity);
         await context.SaveChangesAsync();
         NavigationManager.NavigateTo("/books");
     }

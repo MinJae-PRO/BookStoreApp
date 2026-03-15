@@ -1,0 +1,180 @@
+@page "/checkout"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<PageTitle>Checkout</PageTitle>
+
+<h1>Order Summary</h1>
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <NotAuthorized>
+            <p class="text-danger">You must be logged in to checkout.</p>
+        </NotAuthorized>
+        <Authorized>
+            @if (_cartItems.Count == 0)
+            {
+                <p class="text-muted">Your cart is empty. <a href="/books">Go back to Book List</a></p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Price</th>
+                            <th>QTY</th>
+                            <th>Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _cartItems)
+                        {
+                            <tr>
+                                <td>@item.Book.Title</td>
+                                <td>@item.Book.Price.ToString("C")</td>
+                                <td>@item.Quantity</td>
+                                <td>@((item.Book.Price * item.Quantity).ToString("C"))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="d-flex justify-content-end align-items-center gap-3 mt-3">
+                    <h5 class="mb-0">Total: @_cartItems.Sum(i => i.Book.Price * i.Quantity).ToString("C")</h5>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="alert alert-danger mt-3">@_error</div>
+                }
+
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn-store" @onclick="ConfirmPurchase" disabled="@_processing">
+                        @if (_processing)
+                        {
+                            <span>Processing...</span>
+                        }
+                        else
+                        {
+                            <span>Confirm Purchase</span>
+                        }
+                    </button>
+                    <a href="/cart" class="btn-store">Cancel</a>
+                </div>
+            }
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private List<CartItem> _cartItems = new();
+    private string? _userId;
+    private string? _error;
+    private bool _processing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is not null)
+        {
+            _userId = appUser.Id;
+            await LoadCartAsync();
+        }
+    }
+
+    private async Task LoadCartAsync()
+    {
+        await using var context = DbFactory.CreateDbContext();
+        _cartItems = await context.CartItems
+            .Include(c => c.Book)
+            .Where(c => c.UserId == _userId)
+            .ToListAsync();
+    }
+
+    private async Task ConfirmPurchase()
+    {
+        if (_userId is null) return;
+        _processing = true;
+        _error = null;
+
+        await using var context = DbFactory.CreateDbContext();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // Load cart items with book info
+            var cartItems = await context.CartItems
+                .Include(c => c.Book)
+                .Where(c => c.UserId == _userId)
+                .ToListAsync();
+
+            if (cartItems.Count == 0)
+            {
+                _error = "Your cart is empty.";
+                _processing = false;
+                return;
+            }
+
+            // Check stock for each item
+            foreach (var item in cartItems)
+            {
+                if (item.Book.Stock < item.Quantity)
+                {
+                    _error = $"Not enough stock for \"{item.Book.Title}\". Available: {item.Book.Stock}";
+                    _processing = false;
+                    return;
+                }
+            }
+
+            // Create order with order items
+            var order = new Order
+            {
+                UserId = _userId,
+                OrderDate = DateTime.UtcNow,
+                TotalPrice = cartItems.Sum(i => i.Book.Price * i.Quantity),
+                OrderItems = cartItems.Select(item => new OrderItem
+                {
+                    BookId = item.BookId,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.Book.Price
+                }).ToList()
+            };
+            context.Orders.Add(order);
+
+            // Reduce stock
+            foreach (var item in cartItems)
+            {
+                item.Book.Stock -= item.Quantity;
+            }
+
+            // Clear cart
+            context.CartItems.RemoveRange(cartItems);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            _error = "An error occurred while processing your order. Please try again.";
+            _processing = false;
+            return;
+        }
+
+        NavigationManager.NavigateTo("/orders");
+    }
+}

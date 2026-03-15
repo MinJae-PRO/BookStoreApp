@@ -58,3 +58,54 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.btn-store {
+    display: inline-block;
+    outline: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 20px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 13px 23px;
+    border: 1px solid #222;
+    transition: box-shadow 0.2s ease 0s, transform 0.1s ease 0s;
+    background: #fff;
+    color: #222;
+}
+
+.btn-store:hover {
+    border-color: #000;
+    background: #f7f7f7;
+}
+
+.btn-store:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-store-danger {
+    display: inline-block;
+    outline: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 20px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 13px 23px;
+    border: 1px solid #dc3545;
+    transition: box-shadow 0.2s ease 0s, transform 0.1s ease 0s;
+    background: #fff;
+    color: #dc3545;
+}
+
+.btn-store-danger:hover {
+    border-color: #b02a37;
+    background: #fdf0f1;
+}
+
+.btn-store-sm {
+    font-size: 13px;
+    line-height: 16px;
+    padding: 6px 14px;
+}

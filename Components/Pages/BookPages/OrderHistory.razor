@@ -1,0 +1,82 @@
+@page "/orders"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using BookStoreApp.Models
+@using BookStoreApp.Data
+@inject IDbContextFactory<BookStoreApp.Data.AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IServiceScopeFactory ScopeFactory
+
+@rendermode InteractiveServer
+
+<PageTitle>Order History</PageTitle>
+
+<h1>Order History</h1>
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <NotAuthorized>
+            <p class="text-danger">You must be logged in for viewing.</p>
+        </NotAuthorized>
+        <Authorized>
+            @if (_orders.Count == 0)
+            {
+                <p class="text-muted">No orders yet. <a href="/books">Browse books</a></p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Order #</th>
+                            <th>Date</th>
+                            <th>Price</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in _orders)
+                        {
+                            <tr>
+                                <td>#@order.Id</td>
+                                <td>@order.OrderDate.ToString("yyyy-MM-dd")</td>
+                                <td>@order.TotalPrice.ToString("C")</td>
+                                <td><a href="@($"/orders/detail?id={order.Id}")">View Details</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </Authorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private List<Order> _orders = new();
+    private string? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+
+        if (appUser is not null)
+        {
+            _userId = appUser.Id;
+            await LoadOrdersAsync();
+        }
+    }
+
+    private async Task LoadOrdersAsync()
+    {
+        await using var context = DbFactory.CreateDbContext();
+        _orders = await context.Orders
+            .Where(o => o.UserId == _userId)
+            .OrderByDescending(o => o.OrderDate)
+            .ToListAsync();
+    }
+}

@@ -7,7 +7,7 @@
 
 
 
-<PageTitle>Log Up</PageTitle>
+<PageTitle>Log In</PageTitle>
 
 <h1>Log In</h1>
 
@@ -21,7 +21,7 @@
             @* <ValidationSummary class="text-danger" role="alert"/> *@
             <div class="mb-3">
 
-                <label for="title" class="form-label">Email::</label>
+                <label for="title" class="form-label">Email:</label>
                 <InputText id="title" type="email" @bind-Value="InputUser.Email" class="form-control" aria-required="true" placeholder="Enter your email address." />
                 <ValidationMessage For="() => InputUser.Email" class="text-danger" />
             </div>
@@ -38,8 +38,8 @@
                 <div class="text-danger mb-3"> Incorrect Email or Password</div>
 			}
             
-            <button type="submit" class="me-3 btn btn-primary">Log in</button>
-            <button type="reset" class="btn btn-primary">Reset</button>
+            <button type="submit" class="btn-store me-3">Log in</button>
+            <button type="reset" class="btn-store">Reset</button>
         </EditForm>
     </div>
 </div>

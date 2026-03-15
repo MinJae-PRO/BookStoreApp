@@ -1,34 +1,65 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
 @using System.Security.Claims
 @using BookStoreApp.Models
 @inject AuthenticationStateProvider Auth
-@inject UserManager<AppUser> UserManager
+@inject IServiceScopeFactory ScopeFactory
 
 <nav class="navbar bg-body-tertiary px-3">
-	<div class="container-fluid">
-		<a class="navbar-brand" href="#">
-			BookStore
-		</a>
+	<div class="container-fluid navbar-layout">
 
-		<ul class="nav">
-			<a class="nav-link" href="#">Home</a>
-			<a class="nav-link" href="/books">Book List</a>
+		<div class="nav-left">
+			<div class="dropdown-wrapper">
+				<button class="btn btn-link p-0 border-0" @onclick="ToggleMenu" @onclick:stopPropagation="true">
+					<img src="images/menu.png" alt="Menu" width="24" height="24" />
+				</button>
+				@if (_menuOpen)
+				{
+					<div class="dropdown-menu-custom show">
+						<a class="dropdown-item" href="/" @onclick="CloseMenu">Home</a>
+						<a class="dropdown-item" href="/books" @onclick="CloseMenu">Book List</a>
+						<CascadingAuthenticationState>
+							<AuthorizeView>
+								<NotAuthorized>
+									<a class="dropdown-item" href="/register" @onclick="CloseMenu">Sign Up</a>
+									<a class="dropdown-item" href="/login" @onclick="CloseMenu">Log In</a>
+								</NotAuthorized>
+								<Authorized>
+									<a class="dropdown-item" href="/logout" @onclick="CloseMenu">Log Out</a>
+								</Authorized>
+							</AuthorizeView>
+						</CascadingAuthenticationState>
+					</div>
+				}
+			</div>
+		</div>
+
+		<a class="navbar-brand nav-center" href="/">BookStore</a>
+
+		<div class="nav-right">
 			<CascadingAuthenticationState>
 				<AuthorizeView>
-					<NotAuthorized>
-						<a class="nav-link" href="/register">Sign Up</a>
-						<a class="nav-link" href="/login">Log In</a>
-					</NotAuthorized>
 					<Authorized>
-
-						<a class="nav-link" href="/logout">Log Out</a>
-						<span class="nav-link text-dark">@_userName (@_userRoleName)</span>
+						<a class="nav-link p-0" href="/cart">
+							<img src="images/cart.png" alt="Cart" width="20" height="20" />
+						</a>
+						<a href="/profile" class="profile-link">
+							<img src="images/profile.png" alt="Profile" width="20" height="20" class="profile-img" />
+							<span class="profile-name">@_userName (@_userRoleName)</span>
+						</a>
 					</Authorized>
+					<NotAuthorized>
+						<a class="nav-link p-0" href="/login">
+							<img src="images/cart.png" alt="Cart" width="20" height="20" />
+						</a>
+						<a href="/login" class="profile-link">
+							<img src="images/profile.png" alt="Profile" width="20" height="20" class="profile-img" />
+						</a>
+					</NotAuthorized>
 				</AuthorizeView>
 			</CascadingAuthenticationState>
-
-		</ul>
+		</div>
 
 	</div>
 </nav>
@@ -36,8 +67,11 @@
 @code {
 	private string _userName = "";
 	private string _userRoleName = "";
+	private bool _menuOpen;
 
-	// Identity framework
+	private void ToggleMenu() => _menuOpen = !_menuOpen;
+	private void CloseMenu() => _menuOpen = false;
+
 	protected override async Task OnInitializedAsync()
 	{
 		var authState = await Auth.GetAuthenticationStateAsync();
@@ -49,14 +83,20 @@
 			_userRoleName = "";
 			return;
 		}
-		var appUser = await UserManager.GetUserAsync(user);
+
+		await using var scope = ScopeFactory.CreateAsyncScope();
+        // Usermanager is scoped, so we need to create a scope to get it
+		var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+		var appUser = await userManager.GetUserAsync(user);
 		if (appUser is not null)
 		{
+			// if There is not a name, use email
 			_userName = !string.IsNullOrWhiteSpace(appUser.Name)
 				? appUser.Name
 				: appUser.Email ?? "";
 
-			var roles = await UserManager.GetRolesAsync(appUser);
+			var roles = await userManager.GetRolesAsync(appUser);
 			_userRoleName = roles.FirstOrDefault() ?? "";
 		}
 		else
