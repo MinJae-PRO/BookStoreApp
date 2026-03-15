@@ -7,8 +7,27 @@ Tech Stack:
 This project is developed using Blazor Server as the front-end framework and Entity Framework Core for database interaction. Azure SQL Database is used as the persistent storage layer. The application is deployed to Azure App Service and uses SQL Server authentication for database access.
 
 Implemented Features: 
-The application includes user authentication functionality such as user registration, login, and logout. User credentials are validated against data stored in Azure SQL Database.
-Book management functionality is also implemented. Users can create new book records, view a list of books, access detailed information for a specific book, update book information, and delete existing records.
+The application includes comprehensive user authentication functionality such as user registration, login, and logout. User credentials are validated against data stored in Azure SQL Database. The navigation menu provides easy access to login/logout functionality.
+
+Book management functionality is fully implemented. Users can create new book records, view a list of books, access detailed information for a specific book, update book information, and delete existing records.
+
+Additional features include:
+- Search Functionality: Users can search for books by title, author, or genre
+- Shopping Cart: Users can add books to their cart, modify quantities, and manage cart items
+- Book Reviews: Users can write and read reviews for books
+- Favorite Books: Users can save books to their favorites list and access them in "My Books" section
+- Order Management: Complete checkout process with order placement
+- Order History: Users can view their complete order history with detailed information
+- User Profile: Users can update their profile information including name changes
+- Navigation Menu: Integrated login/logout functionality accessible from the main navigation
+
+User Roles & Access:
+- New user registrations are automatically assigned the User role with standard access
+- For Admin privileges, use the following credentials:
+  - Email: `admin@gmail.com`
+  - Password: `qwe123`
+- Admin users have additional permissions for book management operations
+
 All database operations are handled through a structured data access layer using Entity Framework Core. The connection string is not hardcoded in the source code. Instead, it is securely configured through Azure App Service settings.
 
 Deployment Information: 

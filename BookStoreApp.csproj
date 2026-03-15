@@ -22,8 +22,6 @@
   <ItemGroup>
     <Folder Include="Components\Pages\Books\" />
     <Folder Include="Migrations\" />
-    <Folder Include="Services\" />
-    <Folder Include="Utilities\" />
   </ItemGroup>
 
   <ItemGroup>
