@@ -36,7 +36,13 @@ Default domain:
 https://bookstoreapp-jae-gbb7hzgdesd8acdt.australiaeast-01.azurewebsites.net
 Example page: 
 https://bookstoreapp-jae-gbb7hzgdesd8acdt.australiaeast-01.azurewebsites.net/books
+
 The Azure SQL firewall is configured to allow the App Service outbound IP addresses to access the database server.
 
+Configuration details 
+- Development: Uses LocalDB for easy local development
+- Production: Deployed on Azure with Azure SQL Database
+- Connection String: Configured through Azure App Service settings (not in source code)
+- 
 Project Purpose:
 This project demonstrates structured development practices using Blazor Server and Azure services. It focuses on proper separation of concerns, secure database configuration, and a complete but simple authentication workflow. The main objective is to show clean architecture, maintainable code, and correct cloud deployment setup.
